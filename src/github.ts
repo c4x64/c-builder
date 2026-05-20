@@ -102,6 +102,9 @@ export async function compileOnGitHub(
 
   const repo = await createRes.json() as { default_branch: string };
 
+  // Small delay to let the repo propagate across GitHub's backend
+  await new Promise(r => setTimeout(r, 1000));
+
   // 2. Get the initial commit SHA (from auto_init README)
   const refRes = await ghFetch(token, `/repos/${login}/${repoName}/git/refs/heads/${repo.default_branch}`);
   if (!refRes.ok) {
@@ -112,11 +115,17 @@ export async function compileOnGitHub(
   const parentSha = ref.object.sha;
 
   // 3. Create blobs for new files
-  const blob = (content: string) =>
-    ghFetch(token, `/repos/${login}/${repoName}/git/blobs`, {
+  const blob = async (content: string) => {
+    const r = await ghFetch(token, `/repos/${login}/${repoName}/git/blobs`, {
       method: 'POST',
       body: JSON.stringify({ content, encoding: 'utf-8' }),
-    }).then(r => r.json() as Promise<{ sha: string }>);
+    });
+    if (!r.ok) {
+      const err = await r.json() as { message: string };
+      throw new Error(`Create blob failed: ${err.message}`);
+    }
+    return r.json() as Promise<{ sha: string }>;
+  };
 
   const [mainBlob, workflowBlob] = await Promise.all([
     blob(code),
