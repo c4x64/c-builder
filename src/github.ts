@@ -132,13 +132,42 @@ export async function compileOnGitHub(
     blob(CI_WORKFLOW),
   ]);
 
-  // 4. Create a new tree with our files (no base_tree — works even on empty repos)
+  // 4. Create sub-trees for nested directory paths, then root tree
+  const workflowTree = await ghFetch(token, `/repos/${login}/${repoName}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({
+      tree: [
+        { path: 'build.yml', mode: '100644', type: 'blob', sha: workflowBlob.sha },
+      ],
+    }),
+  });
+  if (!workflowTree.ok) {
+    const err = await workflowTree.json() as { message: string };
+    throw new Error(`Create workflows tree failed: ${err.message}`);
+  }
+  const wfTree = await workflowTree.json() as { sha: string };
+
+  const githubTree = await ghFetch(token, `/repos/${login}/${repoName}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({
+      tree: [
+        { path: 'workflows', mode: '040000', type: 'tree', sha: wfTree.sha },
+      ],
+    }),
+  });
+  if (!githubTree.ok) {
+    const err = await githubTree.json() as { message: string };
+    throw new Error(`Create .github tree failed: ${err.message}`);
+  }
+  const ghTree = await githubTree.json() as { sha: string };
+
+  // 5. Create root tree referencing both files
   const treeRes = await ghFetch(token, `/repos/${login}/${repoName}/git/trees`, {
     method: 'POST',
     body: JSON.stringify({
       tree: [
         { path: 'main.c', mode: '100644', type: 'blob', sha: mainBlob.sha },
-        { path: '.github/workflows/build.yml', mode: '100644', type: 'blob', sha: workflowBlob.sha },
+        { path: '.github', mode: '040000', type: 'tree', sha: ghTree.sha },
       ],
     }),
   });
