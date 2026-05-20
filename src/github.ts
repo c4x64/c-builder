@@ -63,12 +63,26 @@ jobs:
           path: app
 `;
 
+export async function deleteRepo(token: string, login: string, repoName: string): Promise<void> {
+  const res = await ghFetch(token, `/repos/${login}/${repoName}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json() as { message: string };
+    throw new Error(`Delete repo failed: ${err.message}`);
+  }
+}
+
 export async function compileOnGitHub(
   token: string,
   login: string,
   code: string,
   projectName: string,
-): Promise<string> {
+  prevRepoName?: string,
+): Promise<{ url: string; repoName: string }> {
+  // Delete previous build repo if exists
+  if (prevRepoName) {
+    await deleteRepo(token, login, prevRepoName);
+  }
+
   const repoName = `c-builder-${projectName}-${Date.now()}`;
 
   // 1. Create repo
@@ -144,5 +158,5 @@ export async function compileOnGitHub(
     throw new Error(`Update ref failed: ${err.message}`);
   }
 
-  return `https://github.com/${login}/${repoName}/actions`;
+  return { url: `https://github.com/${login}/${repoName}/actions`, repoName };
 }

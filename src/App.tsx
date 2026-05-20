@@ -17,6 +17,8 @@ const App: React.FC = () => {
   const [compiling, setCompiling] = useState(false);
   const [compileMsg, setCompileMsg] = useState<string | null>(null);
   const [showUiLibMenu, setShowUiLibMenu] = useState(false);
+  const [currentRepoName, setCurrentRepoName] = useState<string | null>(null);
+  const [keepRepo, setKeepRepo] = useState(false);
 
   const { githubToken, githubUser, authError, setAuthError, setGithubAuth, clearGithubAuth,
           widgets, nodes, edges, openProjectId, projects, closeProject, uiLibrary, setUiLibrary } = useStore();
@@ -50,7 +52,9 @@ const App: React.FC = () => {
     setCompileMsg(null);
     try {
       const code = generateCCode(widgets, nodes, edges, projectType ?? 'gui', openProject?.plugin ?? 'none', uiLibrary);
-      const url = await compileOnGitHub(githubToken, githubUser.login, code, openProject?.name ?? 'project');
+      const prev = keepRepo ? undefined : currentRepoName ?? undefined;
+      const { url, repoName } = await compileOnGitHub(githubToken, githubUser.login, code, openProject?.name ?? 'project', prev);
+      setCurrentRepoName(repoName);
       setCompileMsg('✓ Building!');
       window.open(url, '_blank');
     } catch (err: unknown) {
@@ -151,6 +155,12 @@ const App: React.FC = () => {
                 <img src={githubUser.avatar_url} alt={githubUser.login} width={24} height={24} style={{ borderRadius: '50%' }} />
                 <span>{githubUser.login}</span>
               </div>
+              {currentRepoName && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: '#888', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={keepRepo} onChange={e => setKeepRepo(e.target.checked)} style={{ accentColor: '#4fc3f7' }} />
+                  Keep repo
+                </label>
+              )}
               <button className="run-btn" onClick={handleCompile} disabled={compiling}>
                 {compiling ? <Loader size={18} className="spin" /> : <Play size={18} />}
                 {compiling ? 'Pushing...' : 'Compile & Run'}
