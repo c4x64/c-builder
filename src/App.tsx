@@ -23,7 +23,7 @@ const App: React.FC = () => {
 
   const openProject = projects.find(p => p.id === openProjectId) ?? null;
   const projectType = openProject?.type as ProjectType | undefined;
-  const hasUITab = uiLibrary === 'raylib';
+  const hasUITab = uiLibrary !== 'none';
 
   // Clamp view to first available tab when UI tab is hidden
   if (!hasUITab && viewMode === 'UI') setViewMode('LOGIC');
@@ -79,7 +79,7 @@ const App: React.FC = () => {
                 style={{ fontSize: '0.7rem', color: '#888', gap: 3 }}
                 onClick={() => setShowUiLibMenu(!showUiLibMenu)}
               >
-                <Monitor size={12} /> {uiLibrary || 'none'}
+                <Monitor size={12} /> {uiLibrary === 'none' ? 'none' : uiLibrary === 'raylib' ? 'Raylib' : uiLibrary === 'cimgui' ? 'cimgui' : uiLibrary.length > 18 ? uiLibrary.slice(0, 15) + '…' : uiLibrary}
               </button>
               {showUiLibMenu && (
                 <div
@@ -105,6 +105,22 @@ const App: React.FC = () => {
                       {lib === 'none' ? 'None (plain C)' : lib === 'raylib' ? 'Raylib' : 'cimgui (Dear ImGui)'}
                     </div>
                   ))}
+                  <div
+                    style={{
+                      padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem',
+                      color: !['none', 'raylib', 'cimgui'].includes(uiLibrary) ? '#4fc3f7' : '#ccc',
+                      background: !['none', 'raylib', 'cimgui'].includes(uiLibrary) ? 'rgba(79,195,247,0.1)' : 'transparent',
+                      borderTop: '1px solid #444',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#3c3c3c'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = !['none', 'raylib', 'cimgui'].includes(uiLibrary) ? 'rgba(79,195,247,0.1)' : 'transparent'; }}
+                    onClick={() => {
+                      const url = window.prompt('Enter UI library URL or name:', '');
+                      if (url) setUiLibrary(url.trim());
+                    }}
+                  >
+                    Custom URL…
+                  </div>
                 </div>
               )}
             </div>

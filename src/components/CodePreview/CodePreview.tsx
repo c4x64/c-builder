@@ -33,11 +33,11 @@ function tokenize(code: string): Span[] {
 }
 
 const CodePreview: React.FC = () => {
-  const { widgets, nodes, edges, openProjectId, projects } = useStore();
+  const { widgets, nodes, edges, openProjectId, projects, uiLibrary } = useStore();
   const project = projects.find(p => p.id === openProjectId);
   const [copied, setCopied] = useState(false);
 
-  const code = useMemo(() => generateCCode(widgets, nodes, edges, project?.type as 'gui' | 'cli' | 'library' ?? 'gui', project?.plugin ?? 'none'), [widgets, nodes, edges, project?.type, project?.plugin]);
+  const code = useMemo(() => generateCCode(widgets, nodes, edges, project?.type as 'gui' | 'cli' | 'library' ?? 'gui', project?.plugin ?? 'none', uiLibrary), [widgets, nodes, edges, project?.type, project?.plugin, uiLibrary]);
   const spans = useMemo(() => tokenize(code), [code]);
 
   const handleCopy = useCallback(() => {

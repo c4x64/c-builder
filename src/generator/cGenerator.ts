@@ -16,6 +16,8 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
   const lines: string[] = [];
   const raylib = uiLibrary === 'raylib';
   const cimgui = uiLibrary === 'cimgui';
+  const customUiLib = !raylib && !cimgui && uiLibrary !== 'none';
+  const uiLibType = raylib || cimgui || customUiLib;
   const plugin = getPlugin(pluginId);
 
   if (raylib) {
@@ -28,6 +30,10 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
     lines.push(`#include "imgui_impl_opengl3.h"`);
     lines.push(`#include <GLFW/glfw3.h>`);
   }
+  if (customUiLib) {
+    const libName = uiLibrary.replace(/^.*[/\\]/, '').replace(/\.h$/, '');
+    lines.push(`#include "${libName}.h"`);
+  }
   plugin.headers.forEach(h => lines.push(h));
   lines.push(`#include <stdio.h>`);
   lines.push(`#include <stdbool.h>`);
@@ -37,12 +43,11 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
   lines.push(`#include <time.h>`);
   lines.push(``);
 
-  if (raylib || cimgui) {
+  if (uiLibType) {
     lines.push(`#define SCREEN_WIDTH 800`);
     lines.push(`#define SCREEN_HEIGHT 600`);
     lines.push(``);
   }
-
   if (projectType === 'library') {
     lines.push(`// ====================================================`);
     lines.push(`//  ${sanitize('library')}.h — Public API`);
@@ -69,7 +74,7 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
   }
 
   // TextField state variables (only for UI lib types)
-  if (raylib || cimgui) {
+  if (uiLibType) {
     const textFields = widgets.filter(w => w.type === 'TextField');
     if (textFields.length > 0) {
       lines.push(`// TextField buffers`);
@@ -82,7 +87,7 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
   }
 
   // Slider state variables (only for UI lib types)
-  if (raylib || cimgui) {
+  if (uiLibType) {
     const sliders = widgets.filter(w => w.type === 'Slider');
     if (sliders.length > 0) {
       lines.push(`// Slider values`);
@@ -349,7 +354,7 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
   };
 
   // Button event handlers (only for UI lib types)
-  if (raylib || cimgui) {
+  if (uiLibType) {
     const buttons = widgets.filter(w => w.type === 'Button');
     buttons.forEach(w => {
       lines.push(`void On_${sanitize(w.name)}_Clicked(void) {`);
@@ -530,6 +535,62 @@ export const generateCCode = (widgets: Widget[], nodes: Node[], edges: Edge[], p
     lines.push(`        glfwSwapBuffers(window);`);
     lines.push(`    }`);
     lines.push(``);
+
+  } else if (customUiLib) {
+    lines.push(`    while (!WindowShouldClose()) {`);
+    lines.push(`        BeginDrawing();`);
+    lines.push(`        ClearBackground(RAYWHITE);`);
+    lines.push(``);
+
+    widgets.forEach(w => {
+      const x = Math.round(w.x);
+      const y = Math.round(w.y);
+      const width = prop(w.properties.width, 100);
+      const height = prop(w.properties.height, 40);
+      const text = prop<string>(w.properties.text, w.name);
+      const sname = sanitize(w.name);
+
+      if (w.type === 'Button') {
+        const color = hexToRaylibColor(prop<string>(w.properties.color, '#007bff'));
+        lines.push(`        // Button: ${w.name}`);
+        lines.push(`        Rectangle rect_${sname} = { ${x}, ${y}, ${width}, ${height} };`);
+        lines.push(`        if (CheckCollisionPointRec(GetMousePosition(), rect_${sname})) {`);
+        lines.push(`            DrawRectangleRec(rect_${sname}, MAROON);`);
+        lines.push(`            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) On_${sname}_Clicked();`);
+        lines.push(`        } else {`);
+        lines.push(`            DrawRectangleRec(rect_${sname}, ${color});`);
+        lines.push(`        }`);
+        lines.push(`        DrawText("${text}", ${x} + 10, ${y} + 10, 20, WHITE);`);
+        lines.push(``);
+
+      } else if (w.type === 'Label') {
+        lines.push(`        // Label: ${w.name}`);
+        lines.push(`        DrawText("${text}", ${x}, ${y}, 20, DARKGRAY);`);
+        lines.push(``);
+
+      } else if (w.type === 'TextField') {
+        lines.push(`        // TextField: ${w.name}`);
+        lines.push(`        Rectangle tf_${sname} = { ${x}, ${y}, ${width}, ${height} };`);
+        lines.push(`        DrawRectangleLinesEx(tf_${sname}, 1, GRAY);`);
+        lines.push(`        if (CheckCollisionPointRec(GetMousePosition(), tf_${sname}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {`);
+        lines.push(`            // TextField focused (implement focus logic as needed)`);
+        lines.push(`        }`);
+        lines.push(`        DrawText(${sname}_buf, ${x} + 4, ${y} + 10, 18, DARKGRAY);`);
+        lines.push(``);
+
+      } else if (w.type === 'Slider') {
+        const min = prop(w.properties.min, 0);
+        const max = prop(w.properties.max, 100);
+        lines.push(`        // Slider: ${w.name}`);
+        lines.push(`        ${sname}_value = GuiSlider((Rectangle){ ${x}, ${y}, ${width}, ${height} }, "${min}", "${max}", ${sname}_value, ${min}, ${max});`);
+        lines.push(``);
+      }
+    });
+
+    lines.push(`        EndDrawing();`);
+    lines.push(`    }`);
+    lines.push(``);
+    lines.push(`    CloseWindow();`);
 
   } else {
     // CLI mode: no raylib, just print
