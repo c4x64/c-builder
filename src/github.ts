@@ -45,8 +45,6 @@ const ghFetch = (token: string, path: string, opts: RequestInit = {}) =>
     },
   });
 
-const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
-
 const CI_WORKFLOW = `name: Build C App
 on: [push]
 jobs:
@@ -88,17 +86,63 @@ export async function compileOnGitHub(
     throw new Error(`Create repo failed: ${err.message}`);
   }
 
-  // 2. Push main.c
-  await ghFetch(token, `/repos/${login}/${repoName}/contents/main.c`, {
-    method: 'PUT',
-    body: JSON.stringify({ message: 'Add generated C code', content: b64(code) }),
-  });
+  const repo = await createRes.json() as { default_branch: string };
 
-  // 3. Push CI workflow
-  await ghFetch(token, `/repos/${login}/${repoName}/contents/.github/workflows/build.yml`, {
-    method: 'PUT',
-    body: JSON.stringify({ message: 'Add CI workflow', content: b64(CI_WORKFLOW) }),
+  // 2. Create initial commit with both files via Git Trees/Commits API
+  // (avoids `workflow` scope requirement of Contents API for .github/workflows/ paths)
+
+  // 2a. Create blobs
+  const blob = (content: string) =>
+    ghFetch(token, `/repos/${login}/${repoName}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ content, encoding: 'utf-8' }),
+    }).then(r => r.json() as Promise<{ sha: string }>);
+
+  const [mainBlob, workflowBlob] = await Promise.all([
+    blob(code),
+    blob(CI_WORKFLOW),
+  ]);
+
+  // 2b. Create tree with both files
+  const treeRes = await ghFetch(token, `/repos/${login}/${repoName}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({
+      tree: [
+        { path: 'main.c', mode: '100644', type: 'blob', sha: mainBlob.sha },
+        { path: '.github/workflows/build.yml', mode: '100644', type: 'blob', sha: workflowBlob.sha },
+      ],
+    }),
   });
+  if (!treeRes.ok) {
+    const err = await treeRes.json() as { message: string };
+    throw new Error(`Create tree failed: ${err.message}`);
+  }
+  const tree = await treeRes.json() as { sha: string };
+
+  // 2c. Create commit
+  const commitRes = await ghFetch(token, `/repos/${login}/${repoName}/git/commits`, {
+    method: 'POST',
+    body: JSON.stringify({
+      message: 'Add generated C code with CI workflow',
+      tree: tree.sha,
+      parents: [],
+    }),
+  });
+  if (!commitRes.ok) {
+    const err = await commitRes.json() as { message: string };
+    throw new Error(`Create commit failed: ${err.message}`);
+  }
+  const commit = await commitRes.json() as { sha: string };
+
+  // 2d. Update HEAD
+  const refRes = await ghFetch(token, `/repos/${login}/${repoName}/git/refs/heads/${repo.default_branch}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: commit.sha }),
+  });
+  if (!refRes.ok) {
+    const err = await refRes.json() as { message: string };
+    throw new Error(`Update ref failed: ${err.message}`);
+  }
 
   return `https://github.com/${login}/${repoName}/actions`;
 }
