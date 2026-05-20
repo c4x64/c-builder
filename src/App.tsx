@@ -167,6 +167,17 @@ const App: React.FC = () => {
               <button className="gh-connect-btn" onClick={startOAuthFlow}>
                 <GitFork size={16} /> Connect GitHub
               </button>
+              <button className="gh-connect-btn" style={{ background: '#333' }} onClick={async () => {
+                const res = await fetch('/api/github/gh-token');
+                if (!res.ok) return setAuthError('gh CLI not authenticated. Run `gh auth login` first.');
+                const data = await res.json() as { access_token: string };
+                getAuthenticatedUser(data.access_token).then(
+                  user => setGithubAuth(data.access_token, user),
+                  err => setAuthError(`gh auth failed: ${err.message}`),
+                );
+              }}>
+                <GitFork size={16} /> Use gh CLI
+              </button>
             </>
           )}
         </div>

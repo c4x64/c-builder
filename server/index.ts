@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,17 @@ app.post('/api/github/token', async (req, res) => {
   const data = await r.json() as { access_token?: string; error?: string; error_description?: string };
   if (data.error) return res.status(400).json({ error: data.error_description ?? data.error });
   res.json({ access_token: data.access_token });
+});
+
+// Expose gh CLI token as fallback (no OAuth app needed)
+app.get('/api/github/gh-token', (_req, res) => {
+  try {
+    const token = execSync('gh auth token', { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (!token) return res.status(404).json({ error: 'No gh token found' });
+    res.json({ access_token: token });
+  } catch {
+    res.status(404).json({ error: 'gh CLI not authenticated or not installed' });
+  }
 });
 
 // CORS proxy for importing C header files from any URL
