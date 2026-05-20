@@ -123,19 +123,10 @@ export async function compileOnGitHub(
     blob(CI_WORKFLOW),
   ]);
 
-  // 4. Get the current tree (from the initial commit) to build on top of it
-  const commitRes = await ghFetch(token, `/repos/${login}/${repoName}/git/commits/${parentSha}`);
-  if (!commitRes.ok) {
-    const err = await commitRes.json() as { message: string };
-    throw new Error(`Get commit failed: ${err.message}`);
-  }
-  const parentCommit = await commitRes.json() as { tree: { sha: string } };
-
-  // 5. Create a new tree with all files (README + main.c + workflow)
+  // 4. Create a new tree with our files (no base_tree — works even on empty repos)
   const treeRes = await ghFetch(token, `/repos/${login}/${repoName}/git/trees`, {
     method: 'POST',
     body: JSON.stringify({
-      base_tree: parentCommit.tree.sha,
       tree: [
         { path: 'main.c', mode: '100644', type: 'blob', sha: mainBlob.sha },
         { path: '.github/workflows/build.yml', mode: '100644', type: 'blob', sha: workflowBlob.sha },
