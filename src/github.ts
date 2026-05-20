@@ -192,14 +192,24 @@ export async function compileOnGitHub(
   }
   const newCommit = await newCommitRes.json() as { sha: string };
 
-  // 7. Update HEAD
+  // 7. Update HEAD — try PATCH first, fallback to POST (for empty repos)
   const updateRes = await ghFetch(token, `/repos/${login}/${repoName}/git/refs/heads/${repo.default_branch}`, {
     method: 'PATCH',
     body: JSON.stringify({ sha: newCommit.sha, force: true }),
   });
   if (!updateRes.ok) {
-    const err = await updateRes.json() as { message: string };
-    throw new Error(`Update ref failed: ${err.message}`);
+    // If PATCH fails, try creating the ref via POST
+    const createRefRes = await ghFetch(token, `/repos/${login}/${repoName}/git/refs`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ref: `refs/heads/${repo.default_branch}`,
+        sha: newCommit.sha,
+      }),
+    });
+    if (!createRefRes.ok) {
+      const err = await createRefRes.json() as { message: string };
+      throw new Error(`Update ref failed (sha=${newCommit.sha}, branch=${repo.default_branch}): ${err.message}`);
+    }
   }
 
   return { url: `https://github.com/${login}/${repoName}/actions`, repoName };
